@@ -20,7 +20,7 @@ class ViewController: UIViewController, WKNavigationDelegate {
         super.viewDidLoad()
         self.webView.navigationDelegate = self
         
-        guard let url = InstagramManager.shared.autorizationURL else {
+        guard let url = InstagramManager.shared.autorizationURL(for: .publicContent) else {
             print("No autorization url")
             return
         }

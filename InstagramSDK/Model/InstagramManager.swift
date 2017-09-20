@@ -9,25 +9,51 @@
 import UIKit
 
 class InstagramManager {
-    private static let instagramAPIBaseURL = URL(string: "https://api.instagram.com/v1/")
-    private static let clientId = "bbc67133ac414d19b8cde93752124551"
-    private static let redirectURI = "http://testsite.ua"
     private static let accessTokenKey = "access_token"
-
+    enum Scope : String {
+        case basic
+        case publicContent = "public_content"
+        case followerList = "follower_list"
+        case comments
+        case relationships
+        case likes
+    }
+    
     // MARK: -
-    // TODO: implement dependency injection to use shared session instead
-    private lazy var session = URLSession(configuration: URLSessionConfiguration.default)
+    private var session: URLSession
+    private var baseAutorizationURL: URL
+    private var baseApiURL: URL
+    private var redirectURI: String
+    private var clientId: String
+    
+    // MARK: -
     private var userDataTask: URLSessionDataTask?
     private var mediaDataTask: URLSessionDataTask?
+    
     // MARK: - Public interface
-    public static let shared = InstagramManager()
-    public let autorizationURL = URL(string: "https://www.instagram.com/oauth/authorize/?client_id=\(InstagramManager.clientId)&redirect_uri=\(InstagramManager.redirectURI)&response_type=token&scope=public_content")
+    public static let shared = InstagramManager(baseAutorizationURL: URL(string: "https://www.instagram.com/oauth/authorize/")!, baseApiURL: URL(string: "https://api.instagram.com/v1/")!, clientId: "bbc67133ac414d19b8cde93752124551", redirectURI: "http://testsite.ua")
     public var accessToken: String!
 
+    init(baseAutorizationURL: URL, baseApiURL: URL, clientId: String, redirectURI: String, session: URLSession = URLSession(configuration: URLSessionConfiguration.default)) {
+        self.session = session
+        self.baseAutorizationURL = baseAutorizationURL
+        self.baseApiURL = baseApiURL
+        self.clientId = clientId
+        self.redirectURI = redirectURI
+    }
+
+    public func autorizationURL(for scope: Scope) -> URL? {
+        var autorizationURLComponents = URLComponents(url: self.baseAutorizationURL, resolvingAgainstBaseURL: true)
+        let parameters = ["client_id" : self.clientId, "redirect_uri" : self.redirectURI, "response_type" : "token", "scope" : scope.rawValue]
+        autorizationURLComponents?.queryItems = parameters.map { URLQueryItem(name: $0, value: $1) }
+
+        return autorizationURLComponents?.url
+    }
+    
     public func requestUser(with userName: String, completion: @escaping ([InstagramUserResponse.InstagramUser]?, Error?) -> Void) -> Void {
-        let parameters = ["q" : userName, "access_token" : self.accessToken]
-        let endpoint = "users/search"
-        self.userDataTask = self.call(endpoint: endpoint, parameters: parameters) { (data, response, error) in
+        let parameters = ["q" : userName, InstagramManager.accessTokenKey : self.accessToken]
+        let path = "users/search"
+        self.userDataTask = self.call(path: path, parameters: parameters) { (data, response, error) in
             // TODO: handle possible errors
             let decoder = JSONDecoder()
             if let user = try? decoder.decode(InstagramUserResponse.self, from: data!) {
@@ -40,9 +66,9 @@ class InstagramManager {
     }
 
     public func requestMediafiles(userId: String, completion: @escaping ([PagedInstagramMedia.InstagramMedia]?, Error?) -> Void) -> Void {
-        let parameters = ["access_token" : self.accessToken]
-        let endpoint = "users/\(userId)/media/recent/"
-        self.mediaDataTask = self.call(endpoint: endpoint, parameters: parameters) { (data, response, error) in
+        let parameters = [InstagramManager.accessTokenKey : self.accessToken]
+        let path = "users/\(userId)/media/recent/"
+        self.mediaDataTask = self.call(path: path, parameters: parameters) { (data, response, error) in
             // TODO: handle possible errors
             let decoder = JSONDecoder()
             if let media = try? decoder.decode(PagedInstagramMedia.self, from: data!) {
@@ -71,20 +97,21 @@ class InstagramManager {
     
     // MARK: - Private interface
 
-    private func call(endpoint: String, parameters: [String : String?]? = nil, completion: @escaping (Data?, URLResponse?, Error?) -> Void) -> URLSessionDataTask? {
-        guard let apiURL = URL(string: endpoint, relativeTo: type(of: self).instagramAPIBaseURL), var components = URLComponents(url: apiURL, resolvingAgainstBaseURL: true) else {
+    private func call(baseURL: URL? = nil, path: String, parameters: [String : String?]? = nil, completion: @escaping (Data?, URLResponse?, Error?) -> Void) -> URLSessionDataTask? {
+        let theBaseURL = baseURL ?? self.baseApiURL
+        guard let endpointURL = URL(string: path, relativeTo: theBaseURL), var components = URLComponents(url: endpointURL, resolvingAgainstBaseURL: true) else {
             completion(nil, nil, nil)
             return nil
         }
         if let parameters = parameters {
             components.queryItems = parameters.map { URLQueryItem(name: $0, value: $1) }
         }
-        guard let endpointURL = components.url else {
+        guard let endpointURLWithParameters = components.url else {
             completion(nil, nil, nil)
             return nil
         }
 
-        let dataTask = self.session.dataTask(with: endpointURL, completionHandler: completion)
+        let dataTask = self.session.dataTask(with: endpointURLWithParameters, completionHandler: completion)
         dataTask.resume()
         return dataTask
     }
