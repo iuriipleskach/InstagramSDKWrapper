@@ -46,7 +46,7 @@ class ViewController: UIViewController, WKNavigationDelegate {
             }
         }
         
-        // Stop navigation if redirect url is
+        // Stop navigation if redirect url is passed
         decisionHandler(.cancel)
     }
 }

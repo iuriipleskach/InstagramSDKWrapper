@@ -8,9 +8,6 @@
 
 import Foundation
 
-// TODO: implement codable protocol for instagram entities
-// TODO: implement endpoint abstraction in instagram manager
-
 struct InstagramUserResponse: Codable {
     struct InstagramUser: Codable {
         let id: String
